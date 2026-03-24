@@ -138,14 +138,15 @@ class LoggerFactory {
 	}
 }
 
-// Lazy-initialized global factory instance (avoids circular dependency issues)
-let factory: LoggerFactory | undefined;
+// Use globalThis to store the factory, avoiding ESM temporal dead zone issues
+// when this module is involved in circular imports
+const FACTORY_KEY = '__scrivener_mcp_logger_factory__';
 
 function getFactory(): LoggerFactory {
-	if (!factory) {
-		factory = new LoggerFactory();
+	if (!(globalThis as any)[FACTORY_KEY]) {
+		(globalThis as any)[FACTORY_KEY] = new LoggerFactory();
 	}
-	return factory;
+	return (globalThis as any)[FACTORY_KEY];
 }
 
 // Export convenience functions
