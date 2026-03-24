@@ -46,7 +46,6 @@
     "format:check": "prettier --check 'src/**/*.ts'",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run clean && npm run build && npm run test",
-    "prepare": "npm run build",
     "postinstall": "node scripts/postinstall.cjs",
     "uninstall": "node scripts/uninstall.js"
   },
