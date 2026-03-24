@@ -1,14 +1,20 @@
 /* eslint-disable no-console */
 /**
- * Centralized logging system - utilizes common utilities
+ * Centralized logging system - ZERO external imports to prevent circular dependencies.
+ * This module must be fully self-contained since it's imported by nearly every other module.
  */
 
-import { getEnv, isDevelopment } from '../utils/common.js';
-import type { LogContext } from '../types/index.js';
-import { toLogContext } from '../types/index.js';
+// Inline LogContext type (no import from types/index.js)
+export interface LogContext {
+	timestamp?: string;
+	code?: string;
+	source?: string;
+	[key: string]: unknown;
+}
 
-// Re-export LogContext for backward compatibility
-export type { LogContext } from '../types/index.js';
+function toLogContext(obj: Record<string, unknown>): LogContext {
+	return obj as LogContext;
+}
 
 export enum LogLevel {
 	DEBUG = 0,
@@ -29,14 +35,14 @@ class Logger {
 		this.name = name;
 		this.level = level;
 
-		// Default console output
+		// Default console output (inline isDevelopment check instead of importing)
 		this.addOutput((level, message, context) => {
 			const timestamp = new Date().toISOString();
 			const prefix = `[${timestamp}] [${LogLevel[level]}] [${this.name}]`;
 
 			switch (level) {
 				case LogLevel.DEBUG:
-					if (isDevelopment()) {
+					if (process.env.NODE_ENV === 'development') {
 						console.debug(prefix, message, context || '');
 					}
 					break;
@@ -71,35 +77,35 @@ class Logger {
 	}
 
 	debug(message: string, context?: LogContext | Record<string, unknown>): void {
-		const safeContext = context && typeof context === 'object' && !Array.isArray(context) 
+		const safeContext = context && typeof context === 'object' && !Array.isArray(context)
 			? ('timestamp' in context || 'code' in context || 'source' in context ? context as LogContext : toLogContext(context))
 			: context as LogContext;
 		this.log(LogLevel.DEBUG, message, safeContext);
 	}
 
 	info(message: string, context?: LogContext | Record<string, unknown>): void {
-		const safeContext = context && typeof context === 'object' && !Array.isArray(context) 
+		const safeContext = context && typeof context === 'object' && !Array.isArray(context)
 			? ('timestamp' in context || 'code' in context || 'source' in context ? context as LogContext : toLogContext(context))
 			: context as LogContext;
 		this.log(LogLevel.INFO, message, safeContext);
 	}
 
 	warn(message: string, context?: LogContext | Record<string, unknown>): void {
-		const safeContext = context && typeof context === 'object' && !Array.isArray(context) 
+		const safeContext = context && typeof context === 'object' && !Array.isArray(context)
 			? ('timestamp' in context || 'code' in context || 'source' in context ? context as LogContext : toLogContext(context))
 			: context as LogContext;
 		this.log(LogLevel.WARN, message, safeContext);
 	}
 
 	error(message: string, context?: LogContext | Record<string, unknown>): void {
-		const safeContext = context && typeof context === 'object' && !Array.isArray(context) 
+		const safeContext = context && typeof context === 'object' && !Array.isArray(context)
 			? ('timestamp' in context || 'code' in context || 'source' in context ? context as LogContext : toLogContext(context))
 			: context as LogContext;
 		this.log(LogLevel.ERROR, message, safeContext);
 	}
 
 	fatal(message: string, context?: LogContext | Record<string, unknown>): void {
-		const safeContext = context && typeof context === 'object' && !Array.isArray(context) 
+		const safeContext = context && typeof context === 'object' && !Array.isArray(context)
 			? ('timestamp' in context || 'code' in context || 'source' in context ? context as LogContext : toLogContext(context))
 			: context as LogContext;
 		this.log(LogLevel.FATAL, message, safeContext);
@@ -116,8 +122,8 @@ class LoggerFactory {
 	private defaultLevel = LogLevel.INFO;
 
 	constructor() {
-		// Set level from environment using utility
-		const envLevel = getEnv('LOG_LEVEL')?.toUpperCase();
+		// Inline getEnv instead of importing from common.js
+		const envLevel = process.env['LOG_LEVEL']?.toUpperCase();
 		if (envLevel && envLevel in LogLevel) {
 			this.defaultLevel = LogLevel[envLevel as keyof typeof LogLevel] as unknown as LogLevel;
 		}
@@ -138,30 +144,24 @@ class LoggerFactory {
 	}
 }
 
-// Use globalThis with inline key to avoid ESM temporal dead zone issues
-// (all const/let bindings in this module are uninitialized during circular imports)
-function getFactory(): LoggerFactory {
-	if (!(globalThis as any)['__scrivener_mcp_logger_factory__']) {
-		(globalThis as any)['__scrivener_mcp_logger_factory__'] = new LoggerFactory();
-	}
-	return (globalThis as any)['__scrivener_mcp_logger_factory__'];
-}
+// Global factory instance - safe because this module has no imports that could cause cycles
+const factory = new LoggerFactory();
 
 // Export convenience functions
 export function getLogger(name: string): Logger {
-	return getFactory().getLogger(name);
+	return factory.getLogger(name);
 }
 
 export function setGlobalLogLevel(level: LogLevel): void {
-	getFactory().setGlobalLevel(level);
+	factory.setGlobalLevel(level);
 }
 
-// Pre-configured loggers (lazy getters to avoid circular dependency issues)
+// Pre-configured loggers
 export const Loggers = {
-	get main() { return getLogger('main'); },
-	get database() { return getLogger('database'); },
-	get cache() { return getLogger('cache'); },
-	get handlers() { return getLogger('handlers'); },
-	get analysis() { return getLogger('analysis'); },
-	get enhancement() { return getLogger('enhancement'); },
+	main: getLogger('main'),
+	database: getLogger('database'),
+	cache: getLogger('cache'),
+	handlers: getLogger('handlers'),
+	analysis: getLogger('analysis'),
+	enhancement: getLogger('enhancement'),
 } as const;

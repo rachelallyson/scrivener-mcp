@@ -163,16 +163,16 @@ declare const PlotStructureSchema: z.ZodObject<{
         overall: z.ZodEnum<["too slow", "slow", "balanced", "fast", "too fast"]>;
         recommendations: z.ZodArray<z.ZodString, "many">;
     }, "strip", z.ZodTypeAny, {
-        overall: "slow" | "fast" | "balanced" | "too slow" | "too fast";
         recommendations: string[];
+        overall: "slow" | "fast" | "balanced" | "too slow" | "too fast";
     }, {
-        overall: "slow" | "fast" | "balanced" | "too slow" | "too fast";
         recommendations: string[];
+        overall: "slow" | "fast" | "balanced" | "too slow" | "too fast";
     }>;
 }, "strip", z.ZodTypeAny, {
     pacing: {
-        overall: "slow" | "fast" | "balanced" | "too slow" | "too fast";
         recommendations: string[];
+        overall: "slow" | "fast" | "balanced" | "too slow" | "too fast";
     };
     climax: string;
     themes: string[];
@@ -194,8 +194,8 @@ declare const PlotStructureSchema: z.ZodObject<{
     }[];
 }, {
     pacing: {
-        overall: "slow" | "fast" | "balanced" | "too slow" | "too fast";
         recommendations: string[];
+        overall: "slow" | "fast" | "balanced" | "too slow" | "too fast";
     };
     climax: string;
     themes: string[];
@@ -238,12 +238,12 @@ declare const WritingStyleSchema: z.ZodObject<{
     }, "strip", z.ZodTypeAny, {
         averageSentenceLength: number;
         sentenceVariety: "excellent" | "good" | "fair" | "poor";
-        vocabularyLevel: "moderate" | "simple" | "academic" | "advanced";
+        vocabularyLevel: "academic" | "moderate" | "simple" | "advanced";
         descriptiveness: "balanced" | "rich" | "excessive" | "sparse";
     }, {
         averageSentenceLength: number;
         sentenceVariety: "excellent" | "good" | "fair" | "poor";
-        vocabularyLevel: "moderate" | "simple" | "academic" | "advanced";
+        vocabularyLevel: "academic" | "moderate" | "simple" | "advanced";
         descriptiveness: "balanced" | "rich" | "excessive" | "sparse";
     }>;
     dialogue: z.ZodObject<{
@@ -254,12 +254,12 @@ declare const WritingStyleSchema: z.ZodObject<{
     }, "strip", z.ZodTypeAny, {
         naturalness: number;
         characterDistinction: number;
-        tagVariety: "repetitive" | "excellent" | "good" | "limited";
+        tagVariety: "excellent" | "good" | "repetitive" | "limited";
         balanceWithNarration: "balanced" | "too little" | "too much";
     }, {
         naturalness: number;
         characterDistinction: number;
-        tagVariety: "repetitive" | "excellent" | "good" | "limited";
+        tagVariety: "excellent" | "good" | "repetitive" | "limited";
         balanceWithNarration: "balanced" | "too little" | "too much";
     }>;
     techniques: z.ZodArray<z.ZodString, "many">;
@@ -270,7 +270,7 @@ declare const WritingStyleSchema: z.ZodObject<{
     dialogue: {
         naturalness: number;
         characterDistinction: number;
-        tagVariety: "repetitive" | "excellent" | "good" | "limited";
+        tagVariety: "excellent" | "good" | "repetitive" | "limited";
         balanceWithNarration: "balanced" | "too little" | "too much";
     };
     voice: {
@@ -283,7 +283,7 @@ declare const WritingStyleSchema: z.ZodObject<{
     prose: {
         averageSentenceLength: number;
         sentenceVariety: "excellent" | "good" | "fair" | "poor";
-        vocabularyLevel: "moderate" | "simple" | "academic" | "advanced";
+        vocabularyLevel: "academic" | "moderate" | "simple" | "advanced";
         descriptiveness: "balanced" | "rich" | "excessive" | "sparse";
     };
     techniques: string[];
@@ -292,7 +292,7 @@ declare const WritingStyleSchema: z.ZodObject<{
     dialogue: {
         naturalness: number;
         characterDistinction: number;
-        tagVariety: "repetitive" | "excellent" | "good" | "limited";
+        tagVariety: "excellent" | "good" | "repetitive" | "limited";
         balanceWithNarration: "balanced" | "too little" | "too much";
     };
     voice: {
@@ -305,7 +305,7 @@ declare const WritingStyleSchema: z.ZodObject<{
     prose: {
         averageSentenceLength: number;
         sentenceVariety: "excellent" | "good" | "fair" | "poor";
-        vocabularyLevel: "moderate" | "simple" | "academic" | "advanced";
+        vocabularyLevel: "academic" | "moderate" | "simple" | "advanced";
         descriptiveness: "balanced" | "rich" | "excessive" | "sparse";
     };
     techniques: string[];

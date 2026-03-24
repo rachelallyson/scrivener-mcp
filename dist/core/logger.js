@@ -1,9 +1,11 @@
 /* eslint-disable no-console */
 /**
- * Centralized logging system - utilizes common utilities
+ * Centralized logging system - ZERO external imports to prevent circular dependencies.
+ * This module must be fully self-contained since it's imported by nearly every other module.
  */
-import { getEnv, isDevelopment } from '../utils/common.js';
-import { toLogContext } from '../types/index.js';
+function toLogContext(obj) {
+    return obj;
+}
 export var LogLevel;
 (function (LogLevel) {
     LogLevel[LogLevel["DEBUG"] = 0] = "DEBUG";
@@ -17,13 +19,13 @@ class Logger {
         this.outputs = [];
         this.name = name;
         this.level = level;
-        // Default console output
+        // Default console output (inline isDevelopment check instead of importing)
         this.addOutput((level, message, context) => {
             const timestamp = new Date().toISOString();
             const prefix = `[${timestamp}] [${LogLevel[level]}] [${this.name}]`;
             switch (level) {
                 case LogLevel.DEBUG:
-                    if (isDevelopment()) {
+                    if (process.env.NODE_ENV === 'development') {
                         console.debug(prefix, message, context || '');
                     }
                     break;
@@ -92,8 +94,8 @@ class LoggerFactory {
     constructor() {
         this.loggers = new Map();
         this.defaultLevel = LogLevel.INFO;
-        // Set level from environment using utility
-        const envLevel = getEnv('LOG_LEVEL')?.toUpperCase();
+        // Inline getEnv instead of importing from common.js
+        const envLevel = process.env['LOG_LEVEL']?.toUpperCase();
         if (envLevel && envLevel in LogLevel) {
             this.defaultLevel = LogLevel[envLevel];
         }
@@ -111,28 +113,22 @@ class LoggerFactory {
         }
     }
 }
-// Use globalThis with inline key to avoid ESM temporal dead zone issues
-// (all const/let bindings in this module are uninitialized during circular imports)
-function getFactory() {
-    if (!globalThis['__scrivener_mcp_logger_factory__']) {
-        globalThis['__scrivener_mcp_logger_factory__'] = new LoggerFactory();
-    }
-    return globalThis['__scrivener_mcp_logger_factory__'];
-}
+// Global factory instance - safe because this module has no imports that could cause cycles
+const factory = new LoggerFactory();
 // Export convenience functions
 export function getLogger(name) {
-    return getFactory().getLogger(name);
+    return factory.getLogger(name);
 }
 export function setGlobalLogLevel(level) {
-    getFactory().setGlobalLevel(level);
+    factory.setGlobalLevel(level);
 }
-// Pre-configured loggers (lazy getters to avoid circular dependency issues)
+// Pre-configured loggers
 export const Loggers = {
-    get main() { return getLogger('main'); },
-    get database() { return getLogger('database'); },
-    get cache() { return getLogger('cache'); },
-    get handlers() { return getLogger('handlers'); },
-    get analysis() { return getLogger('analysis'); },
-    get enhancement() { return getLogger('enhancement'); },
+    main: getLogger('main'),
+    database: getLogger('database'),
+    cache: getLogger('cache'),
+    handlers: getLogger('handlers'),
+    analysis: getLogger('analysis'),
+    enhancement: getLogger('enhancement'),
 };
 //# sourceMappingURL=logger.js.map

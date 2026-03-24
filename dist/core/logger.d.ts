@@ -1,8 +1,13 @@
 /**
- * Centralized logging system - utilizes common utilities
+ * Centralized logging system - ZERO external imports to prevent circular dependencies.
+ * This module must be fully self-contained since it's imported by nearly every other module.
  */
-import type { LogContext } from '../types/index.js';
-export type { LogContext } from '../types/index.js';
+export interface LogContext {
+    timestamp?: string;
+    code?: string;
+    source?: string;
+    [key: string]: unknown;
+}
 export declare enum LogLevel {
     DEBUG = 0,
     INFO = 1,
@@ -35,4 +40,5 @@ export declare const Loggers: {
     readonly analysis: Logger;
     readonly enhancement: Logger;
 };
+export {};
 //# sourceMappingURL=logger.d.ts.map
