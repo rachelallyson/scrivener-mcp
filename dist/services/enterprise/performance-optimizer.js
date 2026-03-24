@@ -2,8 +2,7 @@
  * Enterprise Performance Optimizer - Advanced caching, memory management, and optimization
  * Multi-layer caching with intelligent eviction, compression, and performance monitoring
  */
-// @ts-expect-error - LRU cache version compatibility
-import LRUCache from 'lru-cache';
+import { LRUCache } from 'lru-cache';
 import { EventEmitter } from 'events';
 import * as zlib from 'zlib';
 import { promisify } from 'util';
@@ -21,7 +20,7 @@ export class IntelligentCache extends EventEmitter {
         this.compressionThreshold = options.compressionThreshold || 1024; // 1KB
         this.l1Cache = new LRUCache({
             max: options.maxSize,
-            maxAge: options.maxAge || 1000 * 60 * 30, // 30 minutes default
+            ttl: options.maxAge || 1000 * 60 * 30, // 30 minutes default
             sizeCalculation: (entry) => entry.size,
             dispose: (value, key) => this.onEviction(key, value, 'l1'),
         });

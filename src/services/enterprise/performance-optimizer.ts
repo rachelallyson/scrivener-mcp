@@ -3,8 +3,7 @@
  * Multi-layer caching with intelligent eviction, compression, and performance monitoring
  */
 
-// @ts-expect-error - LRU cache version compatibility
-import LRUCache from 'lru-cache';
+import { LRUCache } from 'lru-cache';
 import { EventEmitter } from 'events';
 import * as zlib from 'zlib';
 import { promisify } from 'util';
@@ -74,7 +73,7 @@ export class IntelligentCache<T = any> extends EventEmitter {
 
 		this.l1Cache = new LRUCache<string, CacheEntry<T>>({
 			max: options.maxSize,
-			maxAge: options.maxAge || 1000 * 60 * 30, // 30 minutes default
+			ttl: options.maxAge || 1000 * 60 * 30, // 30 minutes default
 			sizeCalculation: (entry: CacheEntry<T>) => entry.size,
 			dispose: (value: CacheEntry<T>, key: string) => this.onEviction(key, value, 'l1'),
 		});
