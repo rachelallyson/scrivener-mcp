@@ -217,15 +217,13 @@ process.on('SIGINT', async () => {
 	process.exit(0);
 });
 
-// Error handling
+// Error handling - log but don't crash the server
 process.on('uncaughtException', (error) => {
-	logger.fatal('Uncaught exception', { error });
-	process.exit(1);
+	logger.error('Uncaught exception (keeping server alive)', { error });
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-	logger.fatal('Unhandled rejection', { reason, promise });
-	process.exit(1);
+	logger.error('Unhandled rejection (keeping server alive)', { reason, promise });
 });
 
 // Start the server
