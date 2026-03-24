@@ -1,0 +1,1 @@
+{"version":3,"file":"index.d.ts","sourceRoot":"","sources":["../../src/analysis/index.ts"],"names":[],"mappings":"AAAA;;GAEG;AAEH,OAAO,EAAE,eAAe,EAAE,MAAM,oBAAoB,CAAC;AACrD,OAAO,EAAE,eAAe,EAAE,MAAM,uBAAuB,CAAC;AAGxD,YAAY,EACX,eAAe,EACf,cAAc,EACd,aAAa,EACb,iBAAiB,EACjB,iBAAiB,EACjB,cAAc,GACd,MAAM,oBAAoB,CAAC;AAE5B,YAAY,EAAE,cAAc,EAAE,iBAAiB,EAAE,MAAM,uBAAuB,CAAC"}

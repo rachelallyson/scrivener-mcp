@@ -1,0 +1,73 @@
+import type { EnhancementRequest, EnhancementResult } from './content-enhancer.js';
+interface InitializationConfig {
+    initTimeout: number;
+    maxRetries: number;
+    connectionPoolSize: number;
+    healthCheckInterval: number;
+    fallbackEnabled: boolean;
+}
+export declare class LangChainContentEnhancer {
+    private langchain;
+    private advanced;
+    private fallbackEnhancer;
+    private logger;
+    private enhancementStrategies;
+    private qualityThreshold;
+    private initialized;
+    private healthStatus;
+    private circuitBreaker;
+    private rateLimiter;
+    private bulkhead;
+    private observability;
+    private cache;
+    private profiler;
+    private metrics;
+    private config;
+    private maxRetries;
+    private retryDelay;
+    constructor(config?: Partial<InitializationConfig>);
+    private initializeEnterpriseComponents;
+    private setupEventHandlers;
+    private startEnterpriseMonitoring;
+    private checkServiceHealth;
+    private updateMetrics;
+    private cleanupResources;
+    private generateCacheKey;
+    initialize(): Promise<void>;
+    private initializeServices;
+    private testConnection;
+    private initializeStrategies;
+    enhance(request: EnhancementRequest): Promise<EnhancementResult>;
+    private enhanceWithRetry;
+    private validateAndSanitizeRequest;
+    private sanitizeContent;
+    private isRetryableError;
+    private updateHealthStatus;
+    private sleep;
+    getHealthStatus(): 'healthy' | 'degraded' | 'unhealthy';
+    isInitialized(): boolean;
+    performHealthCheck(): Promise<boolean>;
+    private buildEnhancementContext;
+    private extractCharacterVoices;
+    private detectSceneType;
+    private performLangChainEnhancement;
+    private buildEnhancementPrompt;
+    private getEnhancementFocus;
+    private buildStyleInstructions;
+    private validateEnhancement;
+    private calculateReadabilityImprovement;
+    private calculateCoherence;
+    private calculateStyleConsistency;
+    private checkTenseConsistency;
+    private checkComplexityConsistency;
+    private calculateCharacterVoiceRetention;
+    private generateAISuggestions;
+    batchEnhance(requests: EnhancementRequest[]): Promise<EnhancementResult[]>;
+    previewEnhancement(request: EnhancementRequest): Promise<{
+        preview: string;
+        confidence: number;
+        estimatedChanges: number;
+    }>;
+}
+export {};
+//# sourceMappingURL=langchain-content-enhancer.d.ts.map

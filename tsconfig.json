@@ -25,5 +25,5 @@
     "types": ["node", "jest", "@webgpu/types"]
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests", "**/*.test.ts", "**/*.spec.ts"]
+  "exclude": ["node_modules", "dist", "tests", "src/testing", "**/*.test.ts", "**/*.spec.ts"]
 }

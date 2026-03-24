@@ -1,0 +1,486 @@
+import * as fs from 'fs';
+import { ErrorCode, createError, handleError } from '../utils/common.js';
+import { buildPath, ensureDir, pathExists, safeStringify, safeWriteFile, truncate, } from '../utils/common.js';
+export class ContextSyncService {
+    constructor(projectPath, databaseService, contextAnalyzer, options = {
+        autoSync: true,
+        syncInterval: 30000, // 30 seconds
+        contextFileFormat: 'both',
+        includeAnalysis: true,
+        includeRelationships: true,
+    }) {
+        this.projectPath = projectPath;
+        this.databaseService = databaseService;
+        this.contextAnalyzer = contextAnalyzer;
+        this.options = options;
+        this.pendingChanges = new Set();
+        this.contextDir = buildPath(projectPath, '.scrivener-context');
+        this.syncStatus = {
+            lastSync: new Date(),
+            documentsInSync: 0,
+            documentsOutOfSync: 0,
+            pendingChanges: [],
+            errors: [],
+        };
+        this.initializeContextDirectory();
+        if (this.options.autoSync) {
+            this.startAutoSync();
+        }
+    }
+    /**
+     * Initialize context directory
+     */
+    async initializeContextDirectory() {
+        await ensureDir(this.contextDir);
+        // Create subdirectories
+        const subdirs = ['chapters', 'characters', 'themes', 'plots', 'analysis'];
+        for (const subdir of subdirs) {
+            const dirPath = buildPath(this.contextDir, subdir);
+            await ensureDir(dirPath);
+        }
+    }
+    /**
+     * Start automatic synchronization
+     */
+    startAutoSync() {
+        if (this.syncTimer) {
+            clearInterval(this.syncTimer);
+        }
+        this.syncTimer = setInterval(() => {
+            this.performSync().catch((error) => {
+                // Auto-sync error handled with proper error formatting
+                const appError = handleError(error, 'auto-sync');
+                this.syncStatus.errors.push(appError.message);
+            });
+        }, this.options.syncInterval);
+    }
+    /**
+     * Stop automatic synchronization
+     */
+    stopAutoSync() {
+        if (this.syncTimer) {
+            clearInterval(this.syncTimer);
+            this.syncTimer = undefined;
+        }
+    }
+    /**
+     * Mark document as changed
+     */
+    markDocumentChanged(documentId) {
+        this.pendingChanges.add(documentId);
+        this.syncStatus.pendingChanges = Array.from(this.pendingChanges);
+        this.syncStatus.documentsOutOfSync++;
+    }
+    /**
+     * Perform full synchronization
+     */
+    async performSync() {
+        // Starting context synchronization
+        try {
+            // Sync pending document changes
+            for (const documentId of this.pendingChanges) {
+                await this.syncDocument(documentId);
+            }
+            // Clear pending changes
+            this.pendingChanges.clear();
+            this.syncStatus.pendingChanges = [];
+            // Update sync status
+            this.syncStatus.lastSync = new Date();
+            this.syncStatus.documentsInSync = await this.countSyncedDocuments();
+            this.syncStatus.documentsOutOfSync = 0;
+            // Generate story-wide context if needed
+            if (this.options.includeAnalysis) {
+                await this.generateStoryContext();
+            }
+            // Context synchronization completed
+        }
+        catch (error) {
+            // Sync failed - error stored in status with proper handling
+            const appError = handleError(error, 'sync');
+            this.syncStatus.errors.push(appError.message);
+            throw appError;
+        }
+    }
+    /**
+     * Sync a single document
+     */
+    async syncDocument(documentId) {
+        try {
+            // Get document from database
+            const document = await this.getDocumentFromDatabase(documentId);
+            if (!document) {
+                // Document ${documentId} not found in database
+                return;
+            }
+            // Get or generate chapter context
+            let context = await this.contextAnalyzer.getChapterContext(documentId);
+            if (!context || this.isContextOutdated(document, context)) {
+                // Need to regenerate context
+                const content = await this.getDocumentContent(documentId);
+                const allDocuments = await this.getAllDocuments();
+                context = await this.contextAnalyzer.analyzeChapter(document, content, allDocuments);
+            }
+            // Write context files
+            await this.writeChapterContextFiles(context);
+            // Update relationships if needed
+            if (this.options.includeRelationships) {
+                await this.syncDocumentRelationships(documentId, context);
+            }
+        }
+        catch (error) {
+            const appError = createError(ErrorCode.SYNC_ERROR, { documentId, error }, `Failed syncing document ${documentId}`);
+            // Failed to sync document - error captured with structured details
+            this.syncStatus.errors.push(appError.message);
+        }
+    }
+    /**
+     * Write chapter context files
+     */
+    async writeChapterContextFiles(context) {
+        const chapterDir = buildPath(this.contextDir, 'chapters');
+        const baseFileName = `${this.sanitizeFileName(context.title)}-${context.documentId.substring(0, 8)}`;
+        // Write JSON format
+        if (this.options.contextFileFormat === 'json' ||
+            this.options.contextFileFormat === 'both') {
+            const jsonPath = buildPath(chapterDir, `${baseFileName}.json`);
+            await safeWriteFile(jsonPath, safeStringify(context) || JSON.stringify(context, null, 2));
+        }
+        // Write Markdown format
+        if (this.options.contextFileFormat === 'markdown' ||
+            this.options.contextFileFormat === 'both') {
+            const mdPath = buildPath(chapterDir, `${baseFileName}.md`);
+            const markdown = this.contextToMarkdown(context);
+            await safeWriteFile(mdPath, markdown);
+        }
+    }
+    /**
+     * Convert context to markdown
+     */
+    contextToMarkdown(context) {
+        let md = `# ${context.title}\n\n`;
+        if (context.synopsis) {
+            md += `## Synopsis\n${context.synopsis}\n\n`;
+        }
+        if (context.notes) {
+            md += `## Notes\n${context.notes}\n\n`;
+        }
+        md += `## Statistics\n`;
+        md += `- Word Count: ${context.wordCount}\n`;
+        md += `- Pacing: ${context.pacing.description}\n\n`;
+        if (context.characters.length > 0) {
+            md += `## Characters\n`;
+            for (const char of context.characters) {
+                md += `- **${char.name}** (${char.role || 'role unknown'}): ${char.appearances} appearances\n`;
+                if (char.lastMention) {
+                    md += `  - Last mention: "${char.lastMention}"\n`;
+                }
+            }
+            md += '\n';
+        }
+        if (context.themes.length > 0) {
+            md += `## Themes\n`;
+            for (const theme of context.themes) {
+                md += `- **${theme.name}** (Prominence: ${(theme.prominence * 100).toFixed(0)}%)\n`;
+                if (theme.examples.length > 0) {
+                    md += `  - Example: "${theme.examples[0]}"\n`;
+                }
+            }
+            md += '\n';
+        }
+        if (context.plotThreads.length > 0) {
+            md += `## Plot Threads\n`;
+            for (const thread of context.plotThreads) {
+                md += `- **${thread.name}** (${thread.status})\n`;
+                if (thread.developments.length > 0) {
+                    md += `  - Recent: ${thread.developments[thread.developments.length - 1]}\n`;
+                }
+            }
+            md += '\n';
+        }
+        md += `## Emotional Arc\n`;
+        md += `- Start: ${context.emotionalArc.start}\n`;
+        md += `- Peak: ${context.emotionalArc.peak}\n`;
+        md += `- End: ${context.emotionalArc.end}\n`;
+        md += `- Overall: ${context.emotionalArc.overall}\n\n`;
+        if (context.keyEvents.length > 0) {
+            md += `## Key Events\n`;
+            for (const event of context.keyEvents) {
+                md += `- ${event}\n`;
+            }
+            md += '\n';
+        }
+        if (context.cliffhangers.length > 0) {
+            md += `## Cliffhangers\n`;
+            for (const cliff of context.cliffhangers) {
+                md += `- ${cliff}\n`;
+            }
+            md += '\n';
+        }
+        if (context.previousChapter) {
+            md += `## Previous Chapter\n`;
+            md += `**${context.previousChapter.title}**: ${context.previousChapter.summary}\n\n`;
+        }
+        if (context.nextChapter) {
+            md += `## Next Chapter\n`;
+            md += `**${context.nextChapter.title}**\n\n`;
+        }
+        return md;
+    }
+    /**
+     * Sync document relationships
+     */
+    async syncDocumentRelationships(documentId, context) {
+        // Sync character appearances
+        for (const char of context.characters) {
+            await this.databaseService.createRelationship(char.id, 'character', documentId, 'document', 'APPEARS_IN', { appearances: char.appearances });
+        }
+        // Sync theme presence
+        for (const theme of context.themes) {
+            // First ensure theme exists in database
+            const themeId = await this.ensureThemeExists(theme.name);
+            await this.databaseService.createRelationship(themeId, 'theme', documentId, 'document', 'PRESENT_IN', { prominence: theme.prominence });
+        }
+        // Sync chapter flow
+        if (context.previousChapter) {
+            await this.databaseService.createRelationship(documentId, 'document', context.previousChapter.id, 'document', 'FOLLOWS', {});
+        }
+    }
+    /**
+     * Ensure theme exists in database
+     */
+    async ensureThemeExists(themeName) {
+        const themeId = `theme-${themeName.toLowerCase().replace(/\s+/g, '-')}`;
+        if (this.databaseService.getSQLite()) {
+            const stmt = this.databaseService.getSQLite().getDatabase().prepare(`
+				INSERT OR IGNORE INTO themes (id, name, description)
+				VALUES (?, ?, ?)
+			`);
+            stmt.run([themeId, themeName, `Theme: ${themeName}`]);
+        }
+        if (this.databaseService.getNeo4j()?.isAvailable()) {
+            await this.databaseService.getNeo4j().query(`
+				MERGE (t:Theme {id: $id})
+				SET t.name = $name
+			`, { id: themeId, name: themeName });
+        }
+        return themeId;
+    }
+    /**
+     * Generate story-wide context
+     */
+    async generateStoryContext() {
+        // Get all chapter contexts
+        const chapters = await this.getAllChapterContexts();
+        if (chapters.length === 0) {
+            // No chapter contexts available for story analysis
+            return;
+        }
+        // Build story context
+        const documents = await this.getAllDocuments();
+        const storyContext = await this.contextAnalyzer.buildStoryContext(documents, chapters);
+        // Write story context files
+        const storyPath = buildPath(this.contextDir, 'story-context');
+        if (this.options.contextFileFormat === 'json' ||
+            this.options.contextFileFormat === 'both') {
+            await safeWriteFile(buildPath(`${storyPath}.json`), JSON.stringify(storyContext, (_key, value) => {
+                if (value instanceof Map) {
+                    return Object.fromEntries(value);
+                }
+                return value;
+            }, 2));
+        }
+        if (this.options.contextFileFormat === 'markdown' ||
+            this.options.contextFileFormat === 'both') {
+            const markdown = this.storyContextToMarkdown(storyContext);
+            await safeWriteFile(buildPath(`${storyPath}.md`), markdown);
+        }
+    }
+    /**
+     * Convert story context to markdown
+     */
+    storyContextToMarkdown(context) {
+        let md = `# Story Context\n\n`;
+        md += `## Overview\n`;
+        md += `- Total Word Count: ${context.totalWordCount}\n`;
+        md += `- Chapter Count: ${context.chapterCount}\n`;
+        md += `- Pacing Trend: ${context.overallPacing.trend}\n\n`;
+        md += `## Character Arcs\n`;
+        for (const [charId, arc] of context.characterArcs) {
+            md += `### ${arc.character} (${charId})\n`;
+            md += `- Introduction: ${arc.introduction}\n`;
+            md += `- Current Status: ${arc.currentStatus}\n`;
+            md += `- Projected Arc: ${arc.projectedArc}\n\n`;
+        }
+        md += `## Theme Progression\n`;
+        for (const [themeName, prog] of context.themeProgression) {
+            md += `### ${prog.theme || themeName}\n`;
+            md += `- Introduction: ${prog.introduction}\n`;
+            md += `- Current Strength: ${(prog.currentStrength * 100).toFixed(0)}%\n`;
+            md += `- Development:\n`;
+            for (const dev of prog.developments.slice(0, 5)) {
+                md += `  - ${dev}\n`;
+            }
+            md += '\n';
+        }
+        md += `## Plot Threads\n`;
+        for (const [threadId, thread] of context.plotThreads) {
+            md += `### ${thread.thread} [${threadId}]\n`;
+            md += `- Status: ${thread.status}\n`;
+            md += `- Chapters: ${thread.chapters.join(', ')}\n`;
+            if (thread.keyEvents.length > 0) {
+                md += `- Key Events:\n`;
+                for (const event of thread.keyEvents) {
+                    md += `  - ${event}\n`;
+                }
+            }
+            md += '\n';
+        }
+        if (context.overallPacing.suggestions.length > 0) {
+            md += `## Pacing Suggestions\n`;
+            for (const suggestion of context.overallPacing.suggestions) {
+                md += `- ${suggestion}\n`;
+            }
+        }
+        return md;
+    }
+    /**
+     * Check if context is outdated
+     */
+    isContextOutdated(document, context) {
+        // Check if word count has changed significantly
+        if (Math.abs(document.wordCount - context.wordCount) > 50) {
+            return true;
+        }
+        // Check if synopsis or notes have changed
+        if (document.synopsis !== context.synopsis || document.notes !== context.notes) {
+            return true;
+        }
+        // Could add more checks here (last modified date, etc.)
+        return false;
+    }
+    /**
+     * Get document from database
+     */
+    async getDocumentFromDatabase(documentId) {
+        if (!this.databaseService.getSQLite()) {
+            return null;
+        }
+        const result = this.databaseService
+            .getSQLite()
+            .queryOne(`SELECT * FROM documents WHERE id = ?`, [documentId]);
+        if (!result) {
+            return null;
+        }
+        return {
+            id: result.id,
+            title: result.title,
+            type: result.type,
+            synopsis: result.synopsis,
+            notes: result.notes,
+            wordCount: result.word_count || 0,
+            characterCount: result.character_count || 0,
+            children: [],
+        };
+    }
+    /**
+     * Get document content
+     */
+    async getDocumentContent(documentId) {
+        // This would need to be implemented to fetch actual content
+        // For now, return empty string for document: ${documentId}
+        return `[Content for document ${documentId}]`;
+    }
+    /**
+     * Get all documents
+     */
+    async getAllDocuments() {
+        if (!this.databaseService.getSQLite()) {
+            return [];
+        }
+        const results = this.databaseService
+            .getSQLite()
+            .query(`SELECT * FROM documents ORDER BY title`);
+        return results.map((r) => ({
+            id: r.id,
+            title: r.title,
+            type: r.type,
+            synopsis: r.synopsis || '',
+            notes: r.notes || '',
+            wordCount: r.word_count || 0,
+            characterCount: r.character_count || 0,
+            children: [],
+        }));
+    }
+    /**
+     * Get all chapter contexts
+     */
+    async getAllChapterContexts() {
+        const contexts = [];
+        const documents = await this.getAllDocuments();
+        for (const doc of documents) {
+            const context = await this.contextAnalyzer.getChapterContext(doc.id);
+            if (context) {
+                contexts.push(context);
+            }
+        }
+        return contexts;
+    }
+    /**
+     * Count synced documents
+     */
+    async countSyncedDocuments() {
+        const chapterDir = buildPath(this.contextDir, 'chapters');
+        if (!(await pathExists(chapterDir))) {
+            return 0;
+        }
+        const files = await fs.promises.readdir(chapterDir);
+        // Count unique documents (may have both .json and .md files)
+        const uniqueDocs = new Set(files.map((f) => f.replace(/\.(json|md)$/, '')));
+        return uniqueDocs.size;
+    }
+    /**
+     * Sanitize filename - now uses truncate utility
+     */
+    sanitizeFileName(name) {
+        // First truncate to reasonable length, then sanitize
+        const truncated = truncate(name, 100);
+        return truncated.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    }
+    /**
+     * Get sync status
+     */
+    getSyncStatus() {
+        return { ...this.syncStatus };
+    }
+    /**
+     * Export all context files
+     */
+    async exportContextFiles(exportPath) {
+        // Copy entire context directory
+        const copyRecursive = async (src, dest) => {
+            if (!(await pathExists(dest))) {
+                await ensureDir(dest);
+            }
+            const entries = await fs.promises.readdir(src, { withFileTypes: true });
+            for (const entry of entries) {
+                const srcPath = buildPath(src, entry.name);
+                const destPath = buildPath(dest, entry.name);
+                if (entry.isDirectory()) {
+                    await copyRecursive(srcPath, destPath);
+                }
+                else {
+                    await fs.promises.copyFile(srcPath, destPath);
+                }
+            }
+        };
+        await copyRecursive(this.contextDir, exportPath);
+        // Context files exported successfully
+    }
+    /**
+     * Clean up and close
+     */
+    close() {
+        this.stopAutoSync();
+    }
+}
+//# sourceMappingURL=context-sync.js.map

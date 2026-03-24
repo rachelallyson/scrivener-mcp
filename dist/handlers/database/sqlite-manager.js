@@ -1,0 +1,396 @@
+import Database from 'better-sqlite3';
+import * as fs from 'fs';
+import * as path from 'path';
+import { getLogger } from '../../core/logger.js';
+import { AppError, ErrorCode, ensureDir, formatBytes, formatDuration, measureExecution, retry, } from '../../utils/common.js';
+import { CachedSQLiteManager } from './keydb-cache.js';
+const logger = getLogger('sqlite-manager');
+export class SQLiteManager {
+    constructor(dbPath) {
+        this.db = null;
+        this.transactionDepth = 0;
+        this.isInTransaction = false;
+        this.pendingOperations = [];
+        this.cachedManager = null;
+        this.dbPath = dbPath;
+    }
+    /**
+     * Initialize the SQLite database with comprehensive error handling and performance monitoring
+     */
+    async initialize() {
+        const initResult = await measureExecution(async () => {
+            // Ensure directory exists
+            const dir = path.dirname(this.dbPath);
+            await ensureDir(dir);
+            // Open database connection with retry for robustness
+            await retry(async () => {
+                this.db = new Database(this.dbPath);
+                // Verify database is accessible
+                this.db.exec('SELECT 1');
+            }, { maxAttempts: 3 });
+            // Enable WAL mode and optimizations for better performance
+            this.db.exec('PRAGMA journal_mode = WAL;');
+            this.db.exec('PRAGMA synchronous = NORMAL;');
+            this.db.exec('PRAGMA cache_size = 10000;'); // Increased cache
+            this.db.exec('PRAGMA temp_store = MEMORY;');
+            this.db.exec('PRAGMA mmap_size = 268435456;'); // 256MB mmap
+            // Get database size for monitoring
+            const stats = fs.statSync(this.dbPath);
+            logger.info(`Database file size: ${formatBytes(stats.size)}`);
+            // Initialize database schema
+            await this.createTables();
+            // Initialize cached manager if KeyDB is available
+            this.cachedManager = new CachedSQLiteManager(this);
+            await this.cachedManager.initialize();
+        });
+        logger.info(`SQLite database initialized in ${formatDuration(initResult.ms)}`);
+    }
+    /**
+     * Create all necessary tables
+     */
+    async createTables() {
+        if (!this.db) {
+            throw new AppError('Database not initialized', ErrorCode.DATABASE_ERROR);
+        }
+        const createResult = await measureExecution(async () => {
+            // Execute all table creation in a transaction for atomicity and performance
+            this.db.transaction(() => {
+                // Documents table
+                this.db.exec(`
+			CREATE TABLE IF NOT EXISTS documents (
+				id TEXT PRIMARY KEY,
+				title TEXT NOT NULL,
+				type TEXT NOT NULL,
+				path TEXT NOT NULL,
+				synopsis TEXT,
+				notes TEXT,
+				label TEXT,
+				status TEXT,
+				word_count INTEGER DEFAULT 0,
+				character_count INTEGER DEFAULT 0,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				modified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				include_in_compile BOOLEAN DEFAULT 1
+			);
+		`);
+                // Characters table
+                this.db.exec(`
+			CREATE TABLE IF NOT EXISTS characters (
+				id TEXT PRIMARY KEY,
+				name TEXT NOT NULL UNIQUE,
+				role TEXT,
+				description TEXT,
+				traits TEXT, -- JSON array
+				character_arc TEXT,
+				appearances TEXT, -- JSON array of document IDs
+				relationships TEXT, -- JSON array
+				notes TEXT,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				modified_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			);
+		`);
+                // Plot threads table
+                this.db.exec(`
+			CREATE TABLE IF NOT EXISTS plot_threads (
+				id TEXT PRIMARY KEY,
+				name TEXT NOT NULL,
+				description TEXT,
+				status TEXT DEFAULT 'active',
+				documents TEXT, -- JSON array of document IDs
+				notes TEXT,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				modified_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			);
+		`);
+                // Themes table
+                this.db.exec(`
+			CREATE TABLE IF NOT EXISTS themes (
+				id TEXT PRIMARY KEY,
+				name TEXT NOT NULL UNIQUE,
+				description TEXT,
+				documents TEXT, -- JSON array of document IDs
+				importance INTEGER DEFAULT 1,
+				notes TEXT,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			);
+		`);
+                // Writing sessions table
+                this.db.exec(`
+			CREATE TABLE IF NOT EXISTS writing_sessions (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				date TEXT NOT NULL,
+				words_written INTEGER DEFAULT 0,
+				duration_minutes INTEGER DEFAULT 0,
+				documents_worked_on TEXT, -- JSON array of document IDs
+				goals_met BOOLEAN DEFAULT 0,
+				notes TEXT,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			);
+		`);
+                // Document relationships table
+                this.db.exec(`
+			CREATE TABLE IF NOT EXISTS document_relationships (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				source_document_id TEXT NOT NULL,
+				target_document_id TEXT NOT NULL,
+				relationship_type TEXT NOT NULL, -- 'follows', 'references', 'continues', 'flashback', etc.
+				notes TEXT,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (source_document_id) REFERENCES documents (id),
+				FOREIGN KEY (target_document_id) REFERENCES documents (id),
+				UNIQUE(source_document_id, target_document_id, relationship_type)
+			);
+		`);
+                // Content analysis table
+                this.db.exec(`
+			CREATE TABLE IF NOT EXISTS content_analysis (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				document_id TEXT NOT NULL,
+				analysis_type TEXT NOT NULL, -- 'readability', 'sentiment', 'style', etc.
+				analysis_data TEXT NOT NULL, -- JSON
+				analyzed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (document_id) REFERENCES documents (id)
+			);
+		`);
+                // Create indexes for better performance
+                this.db.exec(`CREATE INDEX IF NOT EXISTS idx_documents_type ON documents (type);`);
+                this.db.exec(`CREATE INDEX IF NOT EXISTS idx_documents_modified ON documents (modified_at);`);
+                this.db.exec(`CREATE INDEX IF NOT EXISTS idx_characters_name ON characters (name);`);
+                this.db.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_date ON writing_sessions (date);`);
+                this.db.exec(`CREATE INDEX IF NOT EXISTS idx_analysis_document ON content_analysis (document_id);`);
+                this.db.exec(`CREATE INDEX IF NOT EXISTS idx_analysis_type ON content_analysis (analysis_type);`);
+            })();
+        });
+        logger.info(`Database tables created in ${formatDuration(createResult.ms)}`);
+    }
+    /**
+     * Get the database instance
+     */
+    getDatabase() {
+        if (!this.db) {
+            throw new AppError('Database not initialized. Call initialize() first.', ErrorCode.DATABASE_ERROR);
+        }
+        return this.db;
+    }
+    /**
+     * Get cached database manager (if available)
+     */
+    getCachedManager() {
+        return this.cachedManager;
+    }
+    /**
+     * Check if caching is available
+     */
+    isCachingAvailable() {
+        return this.cachedManager?.getCacheStats().size !== undefined;
+    }
+    /**
+     * Execute a query
+     */
+    query(sql, params = []) {
+        if (!this.db) {
+            throw new AppError('Database not initialized', ErrorCode.DATABASE_ERROR);
+        }
+        return this.db.prepare(sql).all(params);
+    }
+    /**
+     * Execute a single row query
+     */
+    queryOne(sql, params = []) {
+        if (!this.db) {
+            throw new AppError('Database not initialized', ErrorCode.DATABASE_ERROR);
+        }
+        return this.db.prepare(sql).get(params);
+    }
+    /**
+     * Execute an insert/update/delete statement
+     */
+    execute(sql, params = []) {
+        if (!this.db) {
+            throw new AppError('Database not initialized', ErrorCode.DATABASE_ERROR);
+        }
+        return this.db.prepare(sql).run(params);
+    }
+    /**
+     * Execute multiple statements in a transaction with retry logic
+     */
+    transaction(fn, retries = 3) {
+        if (!this.db) {
+            throw new AppError('Database not initialized', ErrorCode.DATABASE_ERROR);
+        }
+        let lastError = null;
+        for (let i = 0; i < retries; i++) {
+            try {
+                this.isInTransaction = true;
+                this.transactionDepth++;
+                const result = this.db.transaction(fn)();
+                this.transactionDepth--;
+                if (this.transactionDepth === 0) {
+                    this.isInTransaction = false;
+                    this.processPendingOperations();
+                }
+                return result;
+            }
+            catch (error) {
+                lastError = error;
+                this.transactionDepth = Math.max(0, this.transactionDepth - 1);
+                if (this.transactionDepth === 0) {
+                    this.isInTransaction = false;
+                }
+                // If it's a busy error, retry
+                if (error.code === 'SQLITE_BUSY' && i < retries - 1) {
+                    // Wait a bit before retrying
+                    const delay = Math.min(100 * Math.pow(2, i), 1000);
+                    const start = Date.now();
+                    while (Date.now() - start < delay) {
+                        // Busy wait
+                    }
+                    continue;
+                }
+                throw error;
+            }
+        }
+        throw (lastError || new AppError('Transaction failed after retries', ErrorCode.DATABASE_ERROR));
+    }
+    /**
+     * Process pending operations after transaction completes
+     */
+    processPendingOperations() {
+        while (this.pendingOperations.length > 0) {
+            const operation = this.pendingOperations.shift();
+            if (operation) {
+                try {
+                    operation();
+                }
+                catch (_error) {
+                    // Log but don't throw - these are non-critical operations
+                    logger.debug('Non-critical operation failed', { error: _error });
+                }
+            }
+        }
+    }
+    /**
+     * Begin an explicit transaction
+     */
+    beginTransaction() {
+        if (!this.db) {
+            throw new AppError('Database not initialized', ErrorCode.DATABASE_ERROR);
+        }
+        if (!this.isInTransaction) {
+            this.db.prepare('BEGIN TRANSACTION').run();
+            this.isInTransaction = true;
+            this.transactionDepth = 1;
+        }
+        else {
+            this.transactionDepth++;
+        }
+    }
+    /**
+     * Commit the current transaction
+     */
+    commit() {
+        if (!this.db) {
+            throw new AppError('Database not initialized', ErrorCode.DATABASE_ERROR);
+        }
+        if (this.transactionDepth > 0) {
+            this.transactionDepth--;
+            if (this.transactionDepth === 0 && this.isInTransaction) {
+                this.db.prepare('COMMIT').run();
+                this.isInTransaction = false;
+                this.processPendingOperations();
+            }
+        }
+    }
+    /**
+     * Rollback the current transaction
+     */
+    rollback() {
+        if (!this.db) {
+            throw new AppError('Database not initialized', ErrorCode.DATABASE_ERROR);
+        }
+        if (this.isInTransaction) {
+            this.db.prepare('ROLLBACK').run();
+            this.isInTransaction = false;
+            this.transactionDepth = 0;
+            this.pendingOperations = [];
+        }
+    }
+    /**
+     * Check if database is healthy
+     */
+    async checkHealth() {
+        try {
+            if (!this.db) {
+                return { healthy: false, details: { error: 'Database not initialized' } };
+            }
+            // Run integrity check
+            const integrity = this.db.pragma('integrity_check');
+            const isHealthy = Array.isArray(integrity) && integrity[0]?.integrity_check === 'ok';
+            // Get statistics
+            const stats = this.getDatabaseStats();
+            return {
+                healthy: isHealthy,
+                details: {
+                    integrity,
+                    stats,
+                    transactionDepth: this.transactionDepth,
+                    isInTransaction: this.isInTransaction,
+                },
+            };
+        }
+        catch (error) {
+            return {
+                healthy: false,
+                details: { error: error.message },
+            };
+        }
+    }
+    /**
+     * Close the database connection
+     */
+    async close() {
+        if (this.cachedManager) {
+            await this.cachedManager.close();
+            this.cachedManager = null;
+        }
+        if (this.db) {
+            this.db.close();
+            this.db = null;
+        }
+    }
+    /**
+     * Get database file size
+     */
+    getDatabaseStats() {
+        if (!this.db) {
+            throw new AppError('Database not initialized', ErrorCode.DATABASE_ERROR);
+        }
+        const stats = fs.statSync(this.dbPath);
+        const pragma = this.db.pragma('page_count');
+        const pageSize = this.db.pragma('page_size');
+        return {
+            size: stats.size,
+            pageCount: pragma.page_count,
+            pageSize: pageSize.page_size,
+        };
+    }
+    /**
+     * Vacuum the database to reclaim space
+     */
+    vacuum() {
+        if (!this.db) {
+            throw new AppError('Database not initialized', ErrorCode.DATABASE_ERROR);
+        }
+        this.db.exec('VACUUM;');
+    }
+    /**
+     * Backup database to a file
+     */
+    backup(backupPath) {
+        if (!this.db) {
+            throw new AppError('Database not initialized', ErrorCode.DATABASE_ERROR);
+        }
+        this.db.backup(backupPath);
+    }
+}
+//# sourceMappingURL=sqlite-manager.js.map
