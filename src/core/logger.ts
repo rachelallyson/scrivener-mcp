@@ -138,24 +138,31 @@ class LoggerFactory {
 	}
 }
 
-// Global factory instance
-const factory = new LoggerFactory();
+// Lazy-initialized global factory instance (avoids circular dependency issues)
+let factory: LoggerFactory | undefined;
+
+function getFactory(): LoggerFactory {
+	if (!factory) {
+		factory = new LoggerFactory();
+	}
+	return factory;
+}
 
 // Export convenience functions
 export function getLogger(name: string): Logger {
-	return factory.getLogger(name);
+	return getFactory().getLogger(name);
 }
 
 export function setGlobalLogLevel(level: LogLevel): void {
-	factory.setGlobalLevel(level);
+	getFactory().setGlobalLevel(level);
 }
 
-// Pre-configured loggers
+// Pre-configured loggers (lazy getters to avoid circular dependency issues)
 export const Loggers = {
-	main: getLogger('main'),
-	database: getLogger('database'),
-	cache: getLogger('cache'),
-	handlers: getLogger('handlers'),
-	analysis: getLogger('analysis'),
-	enhancement: getLogger('enhancement'),
+	get main() { return getLogger('main'); },
+	get database() { return getLogger('database'); },
+	get cache() { return getLogger('cache'); },
+	get handlers() { return getLogger('handlers'); },
+	get analysis() { return getLogger('analysis'); },
+	get enhancement() { return getLogger('enhancement'); },
 } as const;
