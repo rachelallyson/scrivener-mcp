@@ -35,26 +35,23 @@ class Logger {
 		this.name = name;
 		this.level = level;
 
-		// Default console output (inline isDevelopment check instead of importing)
+		// ALL output goes to stderr — stdout is reserved for MCP JSON-RPC protocol
 		this.addOutput((level, message, context) => {
 			const timestamp = new Date().toISOString();
 			const prefix = `[${timestamp}] [${LogLevel[level]}] [${this.name}]`;
+			const ctx = context ? ' ' + JSON.stringify(context) : '';
 
 			switch (level) {
 				case LogLevel.DEBUG:
 					if (process.env.NODE_ENV === 'development') {
-						console.debug(prefix, message, context || '');
+						process.stderr.write(`${prefix} ${message}${ctx}\n`);
 					}
 					break;
 				case LogLevel.INFO:
-					console.info(prefix, message, context || '');
-					break;
 				case LogLevel.WARN:
-					console.warn(prefix, message, context || '');
-					break;
 				case LogLevel.ERROR:
 				case LogLevel.FATAL:
-					console.error(prefix, message, context || '');
+					process.stderr.write(`${prefix} ${message}${ctx}\n`);
 					break;
 			}
 		});
