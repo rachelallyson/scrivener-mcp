@@ -30,7 +30,21 @@ export declare class MetadataManager {
     private validationCache;
     private metadataCache;
     private readonly maxStringLength;
+    private labelMap;
+    private statusMap;
     constructor();
+    /**
+     * Initialize label and status maps from project settings
+     */
+    initializeFromProjectSettings(projectStructure: Record<string, unknown>): void;
+    /**
+     * Resolve a label name to its numeric ID (case-insensitive)
+     */
+    private resolveLabelNameToId;
+    /**
+     * Resolve a status name to its numeric ID (case-insensitive)
+     */
+    private resolveStatusNameToId;
     /**
      * Get the project title
      */

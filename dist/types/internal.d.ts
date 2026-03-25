@@ -40,7 +40,9 @@ export interface BinderAttributes {
 export interface BinderMetaData {
     IncludeInCompile?: string;
     Label?: string;
+    LabelID?: string;
     Status?: string;
+    StatusID?: string;
     Synopsis?: string;
     Notes?: string;
     Keywords?: string;

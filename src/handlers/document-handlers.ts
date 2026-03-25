@@ -477,11 +477,17 @@ export const updateMetadataHandler: ToolDefinition = {
 			status,
 		});
 
+		const updates: string[] = [];
+		if (label) updates.push(`label="${label}"`);
+		if (status) updates.push(`status="${status}"`);
+		if (synopsis) updates.push(`synopsis set`);
+		if (notes) updates.push(`notes set`);
+
 		return {
 			content: [
 				{
 					type: 'text',
-					text: 'Metadata updated successfully',
+					text: `Metadata updated for ${documentId}: ${updates.join(', ')}`,
 				},
 			],
 		};

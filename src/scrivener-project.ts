@@ -102,6 +102,9 @@ export class ScrivenerProject {
 		const structure = await this.projectLoader.loadProject();
 		this.documentManager.setProjectStructure(structure);
 
+		// Initialize label/status maps from project settings
+		this.metadataManager.initializeFromProjectSettings(structure as unknown as Record<string, unknown>);
+
 		// Initialize document indexer
 		const documents = await this.getAllDocuments();
 		await documentIndexer.buildIndex(documents);

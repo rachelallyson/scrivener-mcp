@@ -40,12 +40,76 @@ export class MetadataManager {
 	private validationCache: MemoryCache<{ valid: boolean; missing: string[] }>;
 	private metadataCache: MemoryCache<DocumentMetadata>;
 	private readonly maxStringLength = 10000; // Safety limit for metadata fields
+	private labelMap: Map<string, number> = new Map(); // label name -> ID
+	private statusMap: Map<string, number> = new Map(); // status name -> ID
 
 	constructor() {
 		this.validationCache = new MemoryCache<{ valid: boolean; missing: string[] }>(
 			5 * 60 * 1000
 		); // 5 minutes
 		this.metadataCache = new MemoryCache<DocumentMetadata>(10 * 60 * 1000); // 10 minutes
+	}
+
+	/**
+	 * Initialize label and status maps from project settings
+	 */
+	initializeFromProjectSettings(projectStructure: Record<string, unknown>): void {
+		const project = projectStructure?.ScrivenerProject as Record<string, unknown> | undefined;
+		if (!project) return;
+
+		// Parse LabelSettings
+		const labelSettings = project.LabelSettings as Record<string, unknown> | undefined;
+		if (labelSettings?.Labels) {
+			const labels = labelSettings.Labels as Record<string, unknown>;
+			const labelList = Array.isArray(labels.Label) ? labels.Label : labels.Label ? [labels.Label] : [];
+			for (const label of labelList) {
+				const labelObj = label as Record<string, unknown>;
+				const id = Number(labelObj.ID);
+				const name = String(labelObj._ || labelObj['#text'] || labelObj.text || '').toLowerCase().trim();
+				if (name && !isNaN(id)) {
+					this.labelMap.set(name, id);
+				}
+			}
+			logger.info(`Loaded ${this.labelMap.size} label definitions`);
+		}
+
+		// Parse StatusSettings
+		const statusSettings = project.StatusSettings as Record<string, unknown> | undefined;
+		if (statusSettings?.StatusList) {
+			const statuses = statusSettings.StatusList as Record<string, unknown>;
+			const statusList = Array.isArray(statuses.Status) ? statuses.Status : statuses.Status ? [statuses.Status] : [];
+			for (const status of statusList) {
+				const statusObj = status as Record<string, unknown>;
+				const id = Number(statusObj.ID);
+				const name = String(statusObj._ || statusObj['#text'] || statusObj.text || '').toLowerCase().trim();
+				if (name && !isNaN(id)) {
+					this.statusMap.set(name, id);
+				}
+			}
+			logger.info(`Loaded ${this.statusMap.size} status definitions`);
+		}
+	}
+
+	/**
+	 * Resolve a label name to its numeric ID (case-insensitive)
+	 */
+	private resolveLabelNameToId(name: string): number | null {
+		const lower = name.toLowerCase().trim();
+		if (this.labelMap.has(lower)) {
+			return this.labelMap.get(lower)!;
+		}
+		return null;
+	}
+
+	/**
+	 * Resolve a status name to its numeric ID (case-insensitive)
+	 */
+	private resolveStatusNameToId(name: string): number | null {
+		const lower = name.toLowerCase().trim();
+		if (this.statusMap.has(lower)) {
+			return this.statusMap.get(lower)!;
+		}
+		return null;
 	}
 
 	/**
@@ -104,14 +168,38 @@ export class MetadataManager {
 			metaData.Notes = metadata.notes;
 		}
 
-		// Update label
+		// Update label — Scrivener uses numeric LabelID, not string Label
 		if (metadata.label !== undefined) {
-			metaData.Label = metadata.label;
+			// If it's already a numeric ID (or string number), use directly
+			const numericId = Number(metadata.label);
+			if (!isNaN(numericId)) {
+				metaData.LabelID = String(numericId);
+			} else {
+				// Try to resolve label name to ID using project label settings
+				const labelId = this.resolveLabelNameToId(metadata.label);
+				if (labelId !== null) {
+					metaData.LabelID = String(labelId);
+				} else {
+					// Store as string fallback — may not render in Scrivener
+					metaData.LabelID = metadata.label;
+					logger.warn(`Could not resolve label name "${metadata.label}" to ID. Available labels: ${Array.from(this.labelMap.entries()).map(([name, id]) => `${name}=${id}`).join(', ')}`);
+				}
+			}
 		}
 
-		// Update status
+		// Update status — Scrivener uses numeric StatusID
 		if (metadata.status !== undefined) {
-			metaData.Status = metadata.status;
+			const numericId = Number(metadata.status);
+			if (!isNaN(numericId)) {
+				metaData.StatusID = String(numericId);
+			} else {
+				const statusId = this.resolveStatusNameToId(metadata.status);
+				if (statusId !== null) {
+					metaData.StatusID = String(statusId);
+				} else {
+					metaData.StatusID = metadata.status;
+				}
+			}
 		}
 
 		// Update keywords

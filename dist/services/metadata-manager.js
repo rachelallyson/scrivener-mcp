@@ -10,8 +10,68 @@ export class MetadataManager {
     constructor() {
         this.projectTitle = 'Untitled Project';
         this.maxStringLength = 10000; // Safety limit for metadata fields
+        this.labelMap = new Map(); // label name -> ID
+        this.statusMap = new Map(); // status name -> ID
         this.validationCache = new MemoryCache(5 * 60 * 1000); // 5 minutes
         this.metadataCache = new MemoryCache(10 * 60 * 1000); // 10 minutes
+    }
+    /**
+     * Initialize label and status maps from project settings
+     */
+    initializeFromProjectSettings(projectStructure) {
+        const project = projectStructure?.ScrivenerProject;
+        if (!project)
+            return;
+        // Parse LabelSettings
+        const labelSettings = project.LabelSettings;
+        if (labelSettings?.Labels) {
+            const labels = labelSettings.Labels;
+            const labelList = Array.isArray(labels.Label) ? labels.Label : labels.Label ? [labels.Label] : [];
+            for (const label of labelList) {
+                const labelObj = label;
+                const id = Number(labelObj.ID);
+                const name = String(labelObj._ || labelObj['#text'] || labelObj.text || '').toLowerCase().trim();
+                if (name && !isNaN(id)) {
+                    this.labelMap.set(name, id);
+                }
+            }
+            logger.info(`Loaded ${this.labelMap.size} label definitions`);
+        }
+        // Parse StatusSettings
+        const statusSettings = project.StatusSettings;
+        if (statusSettings?.StatusList) {
+            const statuses = statusSettings.StatusList;
+            const statusList = Array.isArray(statuses.Status) ? statuses.Status : statuses.Status ? [statuses.Status] : [];
+            for (const status of statusList) {
+                const statusObj = status;
+                const id = Number(statusObj.ID);
+                const name = String(statusObj._ || statusObj['#text'] || statusObj.text || '').toLowerCase().trim();
+                if (name && !isNaN(id)) {
+                    this.statusMap.set(name, id);
+                }
+            }
+            logger.info(`Loaded ${this.statusMap.size} status definitions`);
+        }
+    }
+    /**
+     * Resolve a label name to its numeric ID (case-insensitive)
+     */
+    resolveLabelNameToId(name) {
+        const lower = name.toLowerCase().trim();
+        if (this.labelMap.has(lower)) {
+            return this.labelMap.get(lower);
+        }
+        return null;
+    }
+    /**
+     * Resolve a status name to its numeric ID (case-insensitive)
+     */
+    resolveStatusNameToId(name) {
+        const lower = name.toLowerCase().trim();
+        if (this.statusMap.has(lower)) {
+            return this.statusMap.get(lower);
+        }
+        return null;
     }
     /**
      * Get the project title
@@ -58,13 +118,41 @@ export class MetadataManager {
         if (metadata.notes !== undefined) {
             metaData.Notes = metadata.notes;
         }
-        // Update label
+        // Update label — Scrivener uses numeric LabelID, not string Label
         if (metadata.label !== undefined) {
-            metaData.Label = metadata.label;
+            // If it's already a numeric ID (or string number), use directly
+            const numericId = Number(metadata.label);
+            if (!isNaN(numericId)) {
+                metaData.LabelID = String(numericId);
+            }
+            else {
+                // Try to resolve label name to ID using project label settings
+                const labelId = this.resolveLabelNameToId(metadata.label);
+                if (labelId !== null) {
+                    metaData.LabelID = String(labelId);
+                }
+                else {
+                    // Store as string fallback — may not render in Scrivener
+                    metaData.LabelID = metadata.label;
+                    logger.warn(`Could not resolve label name "${metadata.label}" to ID. Available labels: ${Array.from(this.labelMap.entries()).map(([name, id]) => `${name}=${id}`).join(', ')}`);
+                }
+            }
         }
-        // Update status
+        // Update status — Scrivener uses numeric StatusID
         if (metadata.status !== undefined) {
-            metaData.Status = metadata.status;
+            const numericId = Number(metadata.status);
+            if (!isNaN(numericId)) {
+                metaData.StatusID = String(numericId);
+            }
+            else {
+                const statusId = this.resolveStatusNameToId(metadata.status);
+                if (statusId !== null) {
+                    metaData.StatusID = String(statusId);
+                }
+                else {
+                    metaData.StatusID = metadata.status;
+                }
+            }
         }
         // Update keywords
         if (metadata.keywords) {
