@@ -362,7 +362,31 @@ export class ScrivenerProject {
 			status?: string;
 		}
 	): Promise<void> {
-		await this.updateMetadata(documentId, metadata);
+		// Write synopsis and notes as separate files (Scrivener stores them on disk, not in .scrivx)
+		const dataDir = path.join(this.projectPath, 'Files', 'Data', documentId);
+
+		if (metadata.synopsis !== undefined) {
+			const fs = await import('fs/promises');
+			await fs.mkdir(dataDir, { recursive: true });
+			await fs.writeFile(path.join(dataDir, 'synopsis.txt'), metadata.synopsis, 'utf-8');
+			logger.info(`Wrote synopsis.txt for ${documentId}`);
+		}
+
+		if (metadata.notes !== undefined) {
+			const fs = await import('fs/promises');
+			await fs.mkdir(dataDir, { recursive: true });
+			await fs.writeFile(path.join(dataDir, 'notes.rtf'), metadata.notes, 'utf-8');
+			logger.info(`Wrote notes for ${documentId}`);
+		}
+
+		// Pass label and status to XML metadata (synopsis/notes handled above, don't put in XML)
+		const xmlMetadata: Record<string, unknown> = {};
+		if (metadata.label !== undefined) xmlMetadata.label = metadata.label;
+		if (metadata.status !== undefined) xmlMetadata.status = metadata.status;
+
+		if (Object.keys(xmlMetadata).length > 0) {
+			await this.updateMetadata(documentId, xmlMetadata);
+		}
 	}
 
 	async updateSynopsisAndNotes(

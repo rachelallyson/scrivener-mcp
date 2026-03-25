@@ -110,14 +110,8 @@ export class MetadataManager {
         if (metadata.title !== undefined) {
             item.Title = metadata.title;
         }
-        // Update synopsis
-        if (metadata.synopsis !== undefined) {
-            metaData.Synopsis = metadata.synopsis;
-        }
-        // Update notes
-        if (metadata.notes !== undefined) {
-            metaData.Notes = metadata.notes;
-        }
+        // Synopsis and notes are stored as separate files by Scrivener (synopsis.txt, notes.rtf)
+        // They are written by ScrivenerProject.updateDocumentMetadata, not here in the XML
         // Update label — Scrivener uses numeric LabelID, not string Label
         if (metadata.label !== undefined) {
             // If it's already a numeric ID (or string number), use directly
