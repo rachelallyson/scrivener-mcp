@@ -28,6 +28,7 @@ import {
 	addBinderItem,
 	findBinderItemById,
 	iterateBinderItems,
+	iterateAllBinderItems,
 	removeBinderItem,
 	validateProjectStructure,
 } from './document-manager-helpers.js';
@@ -680,8 +681,8 @@ export class DocumentManager {
 			if (this.projectStructure?.ScrivenerProject?.Binder) {
 				const binder = this.projectStructure.ScrivenerProject.Binder as BinderContainer;
 
-				// Iterate through all binder items using utility function
-				const generator = iterateBinderItems(binder);
+				// Iterate through ALL binder items recursively (not just top-level)
+				const generator = iterateAllBinderItems(binder);
 				let result = generator.next();
 				while (!result.done) {
 					const item = result.value;

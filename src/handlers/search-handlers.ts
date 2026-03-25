@@ -6,7 +6,6 @@ import type { HandlerResult, ToolDefinition } from './types.js';
 import {
 	getOptionalBooleanArg,
 	getOptionalNumberArg,
-	getOptionalObjectArg,
 	getOptionalStringArg,
 	getStringArg,
 	requireProject,
@@ -56,7 +55,7 @@ export const searchContentHandler: ToolDefinition = {
 		const caseSensitive = getOptionalBooleanArg(args, 'caseSensitive') || false;
 		const regex = getOptionalBooleanArg(args, 'regex') || false;
 		const includeTrash = getOptionalBooleanArg(args, 'includeTrash') || false;
-		const searchIn = getOptionalObjectArg(args, 'searchIn') as string[];
+		const searchIn = Array.isArray(args.searchIn) ? args.searchIn as string[] : undefined;
 
 		try {
 			// Try semantic search first for enhanced results

@@ -2,7 +2,7 @@ import { SemanticDatabaseLayer } from '../handlers/database/langchain-semantic-l
 import { VectorStore } from '../services/ai/vector-store.js';
 import { validateInput } from '../utils/common.js';
 import { LangChainContinuousLearningHandler } from './langchain-continuous-learning-handler.js';
-import { getOptionalBooleanArg, getOptionalNumberArg, getOptionalObjectArg, getOptionalStringArg, getStringArg, requireProject, } from './types.js';
+import { getOptionalBooleanArg, getOptionalNumberArg, getOptionalStringArg, getStringArg, requireProject, } from './types.js';
 import { documentDetailsSchema, moveDocumentSchema, searchContentSchema, searchTrashSchema, } from './validation-schemas.js';
 export const searchContentHandler = {
     name: 'search_content',
@@ -41,7 +41,7 @@ export const searchContentHandler = {
         const caseSensitive = getOptionalBooleanArg(args, 'caseSensitive') || false;
         const regex = getOptionalBooleanArg(args, 'regex') || false;
         const includeTrash = getOptionalBooleanArg(args, 'includeTrash') || false;
-        const searchIn = getOptionalObjectArg(args, 'searchIn');
+        const searchIn = Array.isArray(args.searchIn) ? args.searchIn : undefined;
         try {
             // Try semantic search first for enhanced results
             const learningHandler = new LangChainContinuousLearningHandler();

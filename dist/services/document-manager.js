@@ -9,7 +9,7 @@ import { getLogger } from '../core/logger.js';
 import { ensureDir, handleError, isValidUUID, safeReadFile, truncate, validateInput, } from '../utils/common.js';
 import { generateScrivenerUUID, getDocumentPath } from '../utils/scrivener-utils.js';
 import { FileUtils, PathUtils } from '../utils/shared-patterns.js';
-import { addBinderItem, findBinderItemById, iterateBinderItems, removeBinderItem, validateProjectStructure, } from './document-manager-helpers.js';
+import { addBinderItem, findBinderItemById, iterateBinderItems, iterateAllBinderItems, removeBinderItem, validateProjectStructure, } from './document-manager-helpers.js';
 import { RTFHandler } from './parsers/rtf-handler.js';
 const logger = getLogger('document-manager');
 export class DocumentManager {
@@ -475,8 +475,8 @@ export class DocumentManager {
             // Use utility function to iterate through binder items
             if (this.projectStructure?.ScrivenerProject?.Binder) {
                 const binder = this.projectStructure.ScrivenerProject.Binder;
-                // Iterate through all binder items using utility function
-                const generator = iterateBinderItems(binder);
+                // Iterate through ALL binder items recursively (not just top-level)
+                const generator = iterateAllBinderItems(binder);
                 let result = generator.next();
                 while (!result.done) {
                     const item = result.value;

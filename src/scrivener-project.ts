@@ -648,9 +648,10 @@ export class ScrivenerProject {
 		const structure = await this.getProjectStructure(options?.includeTrash);
 
 		// Convert ScrivenerDocument[] to ProjectStructure format
-		const root = structure[0] || {
+		// Create a virtual root that contains ALL top-level items (not just the first one)
+		const root = {
 			id: 'root',
-			title: 'Project Root',
+			title: 'Manuscript',
 			type: 'Folder' as const,
 			path: '',
 			children: structure,
