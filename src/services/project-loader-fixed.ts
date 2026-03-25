@@ -184,6 +184,7 @@ export class ProjectLoader {
 			const xml = builder.buildObject(cleanStructure);
 
 			// Atomic write with backup
+			logger.info(`Saving project to ${this.scrivxPath} (${xml.length} bytes)`);
 			await this.atomicWrite(this.scrivxPath, xml);
 
 			this.lastLoadTime = Date.now();
@@ -260,8 +261,9 @@ export class ProjectLoader {
 		if (obj && typeof obj === 'object') {
 			const sanitized: Record<string, unknown> = {};
 			for (const [key, value] of Object.entries(obj)) {
-				// Skip internal properties
-				if (key.startsWith('_')) continue;
+				// Keep '_' (xml2js text content) and '$' (xml2js attributes)
+				// Only skip truly internal properties like '__proto__'
+				if (key.startsWith('__')) continue;
 				sanitized[key] = this.sanitizeStructure(value);
 			}
 			return sanitized;
