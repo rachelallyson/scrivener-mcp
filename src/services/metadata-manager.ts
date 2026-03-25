@@ -73,11 +73,11 @@ export class MetadataManager {
 			logger.info(`Loaded ${this.labelMap.size} label definitions`);
 		}
 
-		// Parse StatusSettings
+		// Parse StatusSettings — Scrivener uses StatusItems, not StatusList
 		const statusSettings = project.StatusSettings as Record<string, unknown> | undefined;
-		if (statusSettings?.StatusList) {
-			const statuses = statusSettings.StatusList as Record<string, unknown>;
-			const statusList = Array.isArray(statuses.Status) ? statuses.Status : statuses.Status ? [statuses.Status] : [];
+		const statusContainer = (statusSettings?.StatusItems || statusSettings?.StatusList) as Record<string, unknown> | undefined;
+		if (statusContainer) {
+			const statusList = Array.isArray(statusContainer.Status) ? statusContainer.Status : statusContainer.Status ? [statusContainer.Status] : [];
 			for (const status of statusList) {
 				const statusObj = status as Record<string, unknown>;
 				const id = Number(statusObj.ID);
