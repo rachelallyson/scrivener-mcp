@@ -91,11 +91,19 @@ export class JobQueueService {
                 this.logger.info('Database service initialized');
             }
             this.contentAnalyzer = new ContentAnalyzer();
-            // Step 3: Create queues and workers for each job type
+            // Step 3: Create queues (and workers only when backed by real Redis).
+            // BullMQ Worker / QueueEvents require a genuine Redis connection; the
+            // embedded MemoryRedis shim does not implement the blocking commands they
+            // rely on, which causes "Command timed out" errors every ~2 seconds.
             for (const jobType of Object.values(JobType)) {
                 this.createQueue(jobType);
-                this.createWorker(jobType);
-                this.setupEventListeners(jobType);
+                if (this.connectionType !== 'embedded') {
+                    this.createWorker(jobType);
+                    this.setupEventListeners(jobType);
+                }
+            }
+            if (this.connectionType === 'embedded') {
+                this.logger.info('Running with embedded queue — workers disabled (no Redis available)');
             }
             this.isInitialized = true;
             this.logger.info('Job queue service initialized', {

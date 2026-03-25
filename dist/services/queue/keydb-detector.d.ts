@@ -9,7 +9,12 @@ export interface ConnectionInfo {
     version?: string;
 }
 /**
- * Detect available KeyDB/Redis connection
+ * Detect available KeyDB/Redis connection.
+ *
+ * Redis/KeyDB probing is disabled: the server runs without a Redis dependency
+ * and uses the embedded in-memory queue instead. Attempting to connect to
+ * localhost:6379 (or any other URL) when no Redis is present causes BullMQ
+ * workers to spam "Command timed out" errors every ~2 seconds.
  */
 export declare function detectConnection(): Promise<ConnectionInfo>;
 /**
