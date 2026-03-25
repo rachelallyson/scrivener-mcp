@@ -9,6 +9,7 @@ import { Parser, Builder } from 'xml2js';
 import { getLogger } from '../core/logger.js';
 import { AppError, ErrorCode, safeWriteFile, pathExists } from '../utils/common.js';
 import { AsyncUtils } from '../utils/shared-patterns.js';
+import { findScrivxFile } from '../utils/project-utils.js';
 import type { ProjectStructure, BinderItem } from '../types/internal.js';
 
 const logger = getLogger('project-loader');
@@ -30,6 +31,7 @@ export class ProjectLoader {
 
 	constructor(projectPath: string, options: ProjectLoaderOptions = {}) {
 		this.projectPath = path.resolve(projectPath);
+		// Will be resolved in init(); fallback to project.scrivx for compatibility
 		this.scrivxPath = path.join(this.projectPath, 'project.scrivx');
 
 		this.options = {
@@ -110,6 +112,12 @@ export class ProjectLoader {
 
 		try {
 			logger.info(`Loading Scrivener project from ${this.projectPath}`);
+
+			// Resolve actual .scrivx file (may not be named project.scrivx)
+			const resolvedPath = await findScrivxFile(this.projectPath);
+			if (resolvedPath) {
+				this.scrivxPath = resolvedPath;
+			}
 
 			// Verify project file exists
 			if (!(await pathExists(this.scrivxPath))) {

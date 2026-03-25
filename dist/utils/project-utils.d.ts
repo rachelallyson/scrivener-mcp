@@ -3,6 +3,11 @@
  * Consolidated from project-utils and project-utils-fixed
  */
 /**
+ * Find the .scrivx file inside a Scrivener project directory.
+ * Scrivener projects may use 'project.scrivx' or a custom name like 'MyBook.scrivx'.
+ */
+export declare function findScrivxFile(projectPath: string): Promise<string | null>;
+/**
  * Ensure the .scrivener-mcp directory exists with proper structure and security
  */
 export declare function ensureProjectDataDirectory(projectPath: string): Promise<string>;

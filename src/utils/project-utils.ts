@@ -24,16 +24,25 @@ const _DEFAULT_CACHE_CONFIG: CacheConfig = {
 };
 
 /**
+ * Find the .scrivx file inside a Scrivener project directory.
+ * Scrivener projects may use 'project.scrivx' or a custom name like 'MyBook.scrivx'.
+ */
+export async function findScrivxFile(projectPath: string): Promise<string | null> {
+	try {
+		const entries = await fs.readdir(projectPath);
+		const scrivxFile = entries.find(f => f.endsWith('.scrivx'));
+		return scrivxFile ? PathUtils.build(projectPath, scrivxFile) : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Check if directory is a valid Scrivener project
  */
 async function isScrivenerProject(projectPath: string): Promise<boolean> {
-	try {
-		const projectFile = PathUtils.build(projectPath, 'project.scrivx');
-		const stats = await fs.stat(projectFile);
-		return stats.isFile();
-	} catch {
-		return false;
-	}
+	const scrivxPath = await findScrivxFile(projectPath);
+	return scrivxPath !== null;
 }
 
 /**
