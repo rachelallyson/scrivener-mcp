@@ -93,13 +93,7 @@ export const searchContentHandler: ToolDefinition = {
 				content: [
 					{
 						type: 'text',
-						text: `Found ${semanticResults.documents.length} semantic matches`,
-						data: {
-							...semanticResults,
-							enhanced: true,
-							searchType: 'semantic',
-							sessionId,
-						},
+						text: `Found ${semanticResults.documents.length} semantic matches\n${JSON.stringify(semanticResults, null, 2)}`,
 					},
 				],
 			};
@@ -116,12 +110,9 @@ export const searchContentHandler: ToolDefinition = {
 				content: [
 					{
 						type: 'text',
-						text: `Found ${results.length} matches (basic search)`,
-						data: {
-							results,
-							enhanced: false,
-							fallbackReason: (error as Error).message,
-						},
+						text: results.length > 0
+							? `Found ${results.length} matches:\n${JSON.stringify(results, null, 2)}`
+							: `Found 0 matches for "${query}". Note: search only finds content in document bodies, not titles. Use get_structure to browse by title, or export_project for the full document tree.`,
 					},
 				],
 			};

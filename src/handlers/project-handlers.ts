@@ -83,8 +83,7 @@ export const openProjectHandler: ToolDefinition = {
 			content: [
 				{
 					type: 'text',
-					text: `Project opened: ${metadata.title || path.basename(projectPath)}`,
-					data: { metadata },
+					text: `Project opened: ${metadata.title || path.basename(projectPath)}\n${JSON.stringify(metadata, null, 2)}`,
 				},
 			],
 		};
@@ -130,8 +129,7 @@ export const getStructureHandler: ToolDefinition = {
 				content: [
 					{
 						type: 'text',
-						text: 'Project summary retrieved',
-						data: summary,
+						text: JSON.stringify(summary, null, 2),
 					},
 				],
 			};
@@ -147,8 +145,7 @@ export const getStructureHandler: ToolDefinition = {
 			content: [
 				{
 					type: 'text',
-					text: 'Project structure retrieved',
-					data: structure,
+					text: JSON.stringify(structure, null, 2),
 				},
 			],
 		};

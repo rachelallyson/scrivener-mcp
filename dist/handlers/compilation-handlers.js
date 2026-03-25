@@ -91,13 +91,6 @@ export const compileDocumentsHandler = {
                         text: typeof compiled.content === 'string'
                             ? compiled.content
                             : JSON.stringify(compiled.content),
-                        data: {
-                            ...compiled,
-                            enhanced: true,
-                            langChainProcessed: true,
-                            sessionId,
-                            documentCount: documentsToCompile.length,
-                        },
                     },
                 ],
             };
@@ -107,15 +100,12 @@ export const compileDocumentsHandler = {
             const separator = getOptionalStringArg(args, 'separator') || '\n\n---\n\n';
             const documentIds = documentsToCompile.map((doc) => doc.id);
             const compiled = await project.compileDocuments(documentIds, separator, format);
+            const compiledText = typeof compiled === 'string' ? compiled : JSON.stringify(compiled);
             return {
                 content: [
                     {
                         type: 'text',
-                        text: typeof compiled === 'string' ? compiled : JSON.stringify(compiled),
-                        data: {
-                            enhanced: false,
-                            fallbackReason: error.message,
-                        },
+                        text: compiledText || `Compilation returned empty. Fallback reason: ${error.message}`,
                     },
                 ],
             };
@@ -152,12 +142,12 @@ export const exportProjectHandler = {
         const outputPath = getOptionalStringArg(args, 'outputPath');
         const options = getOptionalObjectArg(args, 'options');
         const result = await project.exportProject(format, outputPath, options);
+        const resultStr = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
         return {
             content: [
                 {
                     type: 'text',
-                    text: `Project exported as ${args.format}`,
-                    data: result,
+                    text: `Project exported as ${args.format}:\n${resultStr}`,
                 },
             ],
         };
@@ -189,8 +179,7 @@ export const getStatisticsHandler = {
             content: [
                 {
                     type: 'text',
-                    text: 'Project statistics generated',
-                    data: fullStats,
+                    text: JSON.stringify(fullStats, null, 2),
                 },
             ],
         };
