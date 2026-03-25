@@ -13,15 +13,27 @@ export declare class ProjectLoader {
     private projectStructure?;
     private lastLoadTime?;
     private options;
+    private rawXml?;
     constructor(projectPath: string, options?: ProjectLoaderOptions);
     /**
      * Load the project structure from disk
      */
     loadProject(): Promise<ProjectStructure>;
     /**
-     * Save the project structure to disk
+     * Save the project structure to disk using targeted XML edits.
+     * We do NOT do a full xml2js roundtrip because that converts XML attributes
+     * to child elements, which Scrivener cannot read.
+     * Instead, we modify the raw XML string directly for metadata changes.
      */
-    saveProject(structure?: ProjectStructure): Promise<void>;
+    saveProject(_structure?: ProjectStructure): Promise<void>;
+    /**
+     * Update metadata for a specific document in the raw XML.
+     * This does targeted string replacement to preserve Scrivener's attribute format.
+     */
+    updateRawXmlMetadata(documentId: string, updates: {
+        labelId?: string;
+        statusId?: string;
+    }): void;
     /**
      * Reload the project from disk
      */

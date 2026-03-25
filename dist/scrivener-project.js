@@ -235,11 +235,40 @@ export class ScrivenerProject {
         if (!structure) {
             throw createError(ErrorCode.INVALID_STATE, 'Project not loaded');
         }
+        // Update in-memory structure (for get_document_info etc.)
         const item = this.findBinderItem(structure, documentId);
         if (!item) {
             throw createError(ErrorCode.NOT_FOUND, `Document ${documentId} not found`);
         }
         this.metadataManager.updateDocumentMetadata(item, metadata);
+        // Update the raw XML directly (preserves Scrivener's attribute format)
+        const updates = {};
+        if (metadata.label !== undefined) {
+            const numericId = Number(metadata.label);
+            if (!isNaN(numericId)) {
+                updates.labelId = String(numericId);
+            }
+            else {
+                // Resolve name to ID
+                const resolved = item.MetaData?.LabelID;
+                if (resolved)
+                    updates.labelId = resolved;
+            }
+        }
+        if (metadata.status !== undefined) {
+            const numericId = Number(metadata.status);
+            if (!isNaN(numericId)) {
+                updates.statusId = String(numericId);
+            }
+            else {
+                const resolved = item.MetaData?.StatusID;
+                if (resolved)
+                    updates.statusId = resolved;
+            }
+        }
+        if (updates.labelId || updates.statusId) {
+            this.projectLoader.updateRawXmlMetadata(documentId, updates);
+        }
         await this.saveProject();
     }
     async updateDocumentMetadata(documentId, metadata) {

@@ -341,6 +341,7 @@ export class ScrivenerProject {
 			throw createError(ErrorCode.INVALID_STATE, 'Project not loaded');
 		}
 
+		// Update in-memory structure (for get_document_info etc.)
 		const item = this.findBinderItem(
 			structure as unknown as Record<string, unknown>,
 			documentId
@@ -348,8 +349,34 @@ export class ScrivenerProject {
 		if (!item) {
 			throw createError(ErrorCode.NOT_FOUND, `Document ${documentId} not found`);
 		}
-
 		this.metadataManager.updateDocumentMetadata(item, metadata);
+
+		// Update the raw XML directly (preserves Scrivener's attribute format)
+		const updates: { labelId?: string; statusId?: string } = {};
+		if (metadata.label !== undefined) {
+			const numericId = Number(metadata.label);
+			if (!isNaN(numericId)) {
+				updates.labelId = String(numericId);
+			} else {
+				// Resolve name to ID
+				const resolved = (item as any).MetaData?.LabelID;
+				if (resolved) updates.labelId = resolved;
+			}
+		}
+		if (metadata.status !== undefined) {
+			const numericId = Number(metadata.status);
+			if (!isNaN(numericId)) {
+				updates.statusId = String(numericId);
+			} else {
+				const resolved = (item as any).MetaData?.StatusID;
+				if (resolved) updates.statusId = resolved;
+			}
+		}
+
+		if (updates.labelId || updates.statusId) {
+			this.projectLoader.updateRawXmlMetadata(documentId, updates);
+		}
+
 		await this.saveProject();
 	}
 

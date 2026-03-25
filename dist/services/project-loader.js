@@ -3,7 +3,7 @@
  */
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { parseStringPromise, Builder } from 'xml2js';
+import { parseStringPromise } from 'xml2js';
 import { getLogger } from '../core/logger.js';
 import { createError, ErrorCode } from '../core/errors.js';
 import { ensureDir, safeParse, safeStringify, safeReadFile, safeWriteFile, buildPath, } from '../utils/common.js';
@@ -35,6 +35,9 @@ export class ProjectLoader {
                 explicitArray: false,
                 mergeAttrs: true,
             });
+            // Store the raw XML so we can do targeted edits instead of full roundtrip
+            // (xml2js roundtrip converts attributes to child elements, breaking Scrivener)
+            this.rawXml = scrivxContent;
             if (!this.projectStructure?.ScrivenerProject) {
                 throw createError(ErrorCode.INVALID_FORMAT, 'Invalid Scrivener project structure: Missing ScrivenerProject element');
             }
@@ -65,27 +68,18 @@ export class ProjectLoader {
         }
     }
     /**
-     * Save the project structure to disk
+     * Save the project structure to disk using targeted XML edits.
+     * We do NOT do a full xml2js roundtrip because that converts XML attributes
+     * to child elements, which Scrivener cannot read.
+     * Instead, we modify the raw XML string directly for metadata changes.
      */
-    async saveProject(structure) {
-        const projectToSave = structure || this.projectStructure;
-        if (!projectToSave) {
+    async saveProject(_structure) {
+        if (!this.rawXml) {
             throw createError(ErrorCode.INVALID_STATE, 'No project loaded to save');
         }
         logger.info(`Saving project to ${this.scrivxPath}`);
-        // Create backup if enabled
-        if (this.options.autoBackup) {
-            await this.createBackup();
-        }
-        // Clean structure for saving (remove internal properties)
-        const cleanStructure = this.cleanForSaving(projectToSave);
-        const builder = new Builder({
-            xmldec: { version: '1.0', encoding: 'UTF-8' },
-            renderOpts: { pretty: true, indent: '    ' },
-        });
         try {
-            const xml = builder.buildObject(cleanStructure);
-            await safeWriteFile(this.scrivxPath, xml);
+            await safeWriteFile(this.scrivxPath, this.rawXml);
             logger.info('Project saved successfully');
         }
         catch (error) {
@@ -97,6 +91,40 @@ export class ProjectLoader {
             }
             throw createError(ErrorCode.IO_ERROR, `Failed to save project: ${error.message}`);
         }
+    }
+    /**
+     * Update metadata for a specific document in the raw XML.
+     * This does targeted string replacement to preserve Scrivener's attribute format.
+     */
+    updateRawXmlMetadata(documentId, updates) {
+        if (!this.rawXml)
+            return;
+        // Find the BinderItem with this UUID and its MetaData block
+        const uuidPattern = new RegExp(`(<BinderItem[^>]*UUID="${documentId}"[^>]*>\\s*(?:<[^>]*>[^<]*<\\/[^>]*>\\s*)*<MetaData>)(.*?)(<\\/MetaData>)`, 's');
+        const match = this.rawXml.match(uuidPattern);
+        if (!match) {
+            logger.warn(`Could not find BinderItem ${documentId} in raw XML for metadata update`);
+            return;
+        }
+        let metadataContent = match[2];
+        if (updates.labelId !== undefined) {
+            if (metadataContent.includes('<LabelID>')) {
+                metadataContent = metadataContent.replace(/<LabelID>[^<]*<\/LabelID>/, `<LabelID>${updates.labelId}</LabelID>`);
+            }
+            else {
+                // Insert before </MetaData>
+                metadataContent = metadataContent.trimEnd() + `\n                                <LabelID>${updates.labelId}</LabelID>\n                            `;
+            }
+        }
+        if (updates.statusId !== undefined) {
+            if (metadataContent.includes('<StatusID>')) {
+                metadataContent = metadataContent.replace(/<StatusID>[^<]*<\/StatusID>/, `<StatusID>${updates.statusId}</StatusID>`);
+            }
+            else {
+                metadataContent = metadataContent.trimEnd() + `\n                                <StatusID>${updates.statusId}</StatusID>\n                            `;
+            }
+        }
+        this.rawXml = this.rawXml.replace(match[0], match[1] + metadataContent + match[3]);
     }
     /**
      * Reload the project from disk
